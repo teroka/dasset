@@ -189,7 +189,7 @@ def compose_data(staglist=None):
                 'eol_status': eol,
                 'hostname': hostname
                 }
-        if args.update or args.semiupdate:
+        if args.update or args.semiupdate or args.eol:
             db[tag] = data[tag]
     return data
 
@@ -223,27 +223,19 @@ def toggle_eol_status(svctag):
     If there's no current status for given TAG, then we set it as False.
     '''
     for key in svctag:
-        try:
-            if db[key]:
-                if db[key]['eol_status'] == 'False':
-                    db[key]['eol_status'] = 'True'
-                    print '[%s] EOL status toggled in DB to "True"!' % key
-                elif db[key]['eol_status'] == 'True':
-                    db[key]['eol_status'] = 'False'
-                    print '[%s] EOL status toggled in DB to "False"!' % key
-                elif db[key]['eol_status'] == 'None':
-                    db[key]['eol_status'] = 'False'
-                    print '[%s] EOL status toggled in DB to "False"!' % key
-                else:
-                    print '[%s] Unknown value set in EOL field: %s' % ( key,
-                        db[key]['eol_status'] )
+        if db[key]:
+            if db[key]['eol_status'] == 'False':
+                db[key]['eol_status'] = 'True'
+                print '[%s] EOL status toggled in DB to "True"!' % key
+            elif db[key]['eol_status'] == 'True':
+                db[key]['eol_status'] = 'False'
+                print '[%s] EOL status toggled in DB to "False"!' % key
+            elif db[key]['eol_status'] == 'None':
+                db[key]['eol_status'] = 'False'
+                print '[%s] EOL status toggled in DB to "False"!' % key
             else:
-                print '[%s] No EOL status set in DB! Setting it to "None"' % key
-                db[key]['eol_status'] = 'None'
-
-        except KeyError:
-            print "[%s] Unable to toggle EOL, doesn't exist in the DB!" % key
-            pass
+                print '[%s] Unknown value set in EOL field: %s' % ( key,
+                   db[key]['eol_status'] )
 
 def get_expiring_hardware(scope):
     '''
