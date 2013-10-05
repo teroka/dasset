@@ -42,6 +42,9 @@ def opts():
             action="store_true")
     parser.add_argument('--update', help='Update DB with results from Dell.',
             action='store_true')
+    parser.add_argument('--semiupdate',
+            help="Update DB with results from Dell if there's no entry in DB.",
+            action='store_true')
     parser.add_argument('--skip', help='''
     Skip local DB check and always poll Dell for data.''',
             action='store_true')
@@ -56,6 +59,8 @@ def opts():
             action='store_true')
     parser.add_argument('--hostname',
             help='Set hostname for the STAG entry')
+    parser.add_argument('--model',
+            help='Set model for the STAG entry.')
 
     args = parser.parse_args()
     if len(sys.argv) < 2:
@@ -96,7 +101,7 @@ def get_warr(svctag):
 def get_warr_from_dell(svctag):
     '''
     Get the data for given tag from dell site
-    This function is adopted from:
+    Core of this function is adopted from:
         https://gist.github.com/leinaddm/1893036
     '''
 
@@ -111,12 +116,19 @@ def get_warr_from_dell(svctag):
     #print client.dict(res)
 
     if len(res) == 0:
-        sys.stderr.write('Unable to get details for service tag: %s\n' % svctag)
+        sys.stderr.write('[%s] Unable to get details for given service tag.\n'
+                % svctag)
         return False
 
     hdrdata = res['Asset'][0]['AssetHeaderData']
+
+    try:
+        model = hdrdata['SystemType'] + ' ' + hdrdata['SystemModel']
+    except AttributeError:
+        model = 'unknown'
+        sys.stderr.write(
+                "[%s] SystemType or SystemModel not found.\n" % svctag )
     ent = res['Asset'][0]['Entitlements'][0]
-    model = hdrdata['SystemType'] + ' ' + hdrdata['SystemModel']
 
     shipped = hdrdata['SystemShipDate']
     warrs = []
@@ -163,6 +175,12 @@ def compose_data(staglist=None):
         except KeyError:
             hostname = 'None'
 
+        try:
+            if model == 'unknown' and db[tag]['model']:
+                model = db[tag]['model']
+        except KeyError:
+            pass
+
         data[tag] = {
                 'shipped': shipped,
                 'endwarranty': endw,
@@ -171,7 +189,7 @@ def compose_data(staglist=None):
                 'eol_status': eol,
                 'hostname': hostname
                 }
-        if args.update:
+        if args.update or args.semiupdate:
             db[tag] = data[tag]
     return data
 
@@ -187,13 +205,15 @@ def remove_key_from_db(svctag):
             fails.append(key)
     return removed, fails
 
-def set_hostname(svctag, hostname):
-    ''' Set hostname for the given service tag'''
+def set_entry(svctag, entry, value):
+    ''' 
+    Set @entry as @value for the given service tag.
+    '''
     for key in svctag:
         try:
             if db[key]:
-                db[key]['hostname'] = hostname
-                print '[%s] hostname set as [%s]' % ( key, hostname )
+                db[key][entry] = value
+                print '[%s] %s set as [%s]' % ( key, entry, value )
         except KeyError:
             print '[%s] not found in the DB!' % key
 
@@ -269,14 +289,24 @@ def print_text(data):
 if __name__ == "__main__":
     args =  opts()
     stags = [s.upper() for s in args.stags]
-    if args.update or args.remove or args.eol or args.hostname:
+    if ( args.update or args.remove or args.eol
+            or args.hostname or args.semiupdate
+            or args.model ):
         db = shelve.open(DB, writeback=True)
     else:
         db = shelve.open(DB, flag='r')
 
     if args.hostname:
         if stags:
-            set_hostname(stags, args.hostname)
+            set_entry(stags, 'hostname', args.hostname)
+            sys.exit()
+        else:
+            print 'No service tags given!'
+            sys.exit()
+
+    if args.model:
+        if stags:
+            set_entry(stags, 'model', args.model)
             sys.exit()
         else:
             print 'No service tags given!'
