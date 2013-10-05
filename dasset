@@ -1,0 +1,318 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+'''
+ Lightweight asset management for Dell hardware.
+
+ *NOTE* the restriction of python shelve, if multiple users
+ uses this tool.
+
+ ## The shelve module does not support concurrent read/write
+ ## access to shelved objects. (Multiple simultaneous read
+ ## accesses are safe.) When a program has a shelf open for writing,
+ ## no other program should have it open for reading or writing.
+
+Dependencies:
+    * python-suds
+
+'''
+
+import suds
+import sys
+import datetime
+import argparse
+import json
+import re
+import shelve
+from time import sleep
+from uuid import uuid4
+from random import randint
+
+# Set this to where ever you want to store your DB.
+DB = '/tmp/dell_assets.db'
+
+def opts():
+    ''' Option parser '''
+    parser = argparse.ArgumentParser(description='''
+    Lightweight Dell Hardware Asset Management''')
+    parser.add_argument('stags', nargs='*')
+    parser.add_argument('--json', help='Output results as JSON.',
+            action="store_true")
+    parser.add_argument('--csv', help='Output results as CSV.',
+            action="store_true")
+    parser.add_argument('--update', help='Update DB with results from Dell.',
+            action='store_true')
+    parser.add_argument('--skip', help='''
+    Skip local DB check and always poll Dell for data.''',
+            action='store_true')
+    parser.add_argument('--remove', help='Remove STAG from local DB.',
+            action='store_true')
+    parser.add_argument('--eol', help='Toggle EOL status of given STAG.',
+            action='store_true')
+    parser.add_argument('--exp',
+            help='Show hardware which has <= N remaining days of warranty.',
+            nargs=1, type=int)
+    parser.add_argument('--printall', help='Print everything we have in the DB.',
+            action='store_true')
+    args = parser.parse_args()
+    if len(sys.argv) < 2:
+        parser.print_help()
+        sys.exit()
+    return args
+
+def days_remaining(endwar = None):
+    ''' Checks how many days we have remaining in the warranty '''
+    delta = (endwar - datetime.datetime.now()).days
+    if delta < 0:
+        return 0
+    else:
+        return delta
+
+def get_warr(svctag):
+    '''
+    Return warranty information from either DB or
+    by querying it from Dell site
+    '''
+    if args.update:
+        return get_warr_from_dell(svctag)
+    elif args.skip:
+        return get_warr_from_dell(svctag)
+    else:
+        try:
+            shipped_date = db[svctag]['shipped']
+            end_date = db[svctag]['endwarranty']
+            model = db[svctag]['model']
+            drem = days_remaining(datetime.datetime.strptime(end_date, '%d.%m.%Y'))
+            return shipped_date, end_date, drem, model
+
+        except KeyError:
+            sys.stderr.write("[%s] doesn't exist in DB, fetcing from Dell.\n"
+                    % svctag)
+            return get_warr_from_dell(svctag)
+
+def get_warr_from_dell(svctag):
+    '''
+    Get the data for given tag from dell site
+    This function is adopted from:
+        https://gist.github.com/leinaddm/1893036
+    '''
+
+    url = 'http://xserv.dell.com/services/assetservice.asmx?WSDL'
+    if len(args.stags) > 1:
+        # Courtesy sleep if we have multiple tags
+        sleep(1)
+    client = suds.client.Client(url)
+    res = client.service.GetAssetInformation(ID, 'dellwarrantycheck',
+            svctag)
+
+    #print client.dict(res)
+
+    if len(res) == 0:
+        sys.stderr.write('Unable to get details for service tag: %s\n' % svctag)
+        return False
+
+    hdrdata = res['Asset'][0]['AssetHeaderData']
+    ent = res['Asset'][0]['Entitlements'][0]
+    model = hdrdata['SystemType'] + ' ' + hdrdata['SystemModel']
+
+    shipped = hdrdata['SystemShipDate']
+    warrs = []
+    for i in ent:
+        if i == None:
+            continue
+        warrs.append(i['EndDate'])
+
+    warrs.sort()
+    endwarranty = warrs[-1]
+
+    drem = days_remaining(endwarranty)
+    shipped_date = shipped.strftime('%d.%m.%Y')
+    end_date = endwarranty.strftime('%d.%m.%Y')
+    return shipped_date, end_date, drem, model
+
+def compose_data(staglist=None):
+    '''
+    Composes dict from given service tags.
+    If none are give, we get everything from the DB.
+    Will sleep 1s between each ext query so we're not hammering the dell site.
+    Write the updated data to DB if so asked.
+    '''
+    data = {}
+
+    if not staglist:
+        staglist = []
+        for key in db:
+            staglist.append(key)
+    
+    for tag in staglist:
+        try:
+            (shipped, endw, drem, model) = get_warr(tag)
+        except TypeError:
+            continue
+        try:
+            if db[tag]['eol_status']:
+                eol = db[tag]['eol_status']
+        except KeyError:
+            eol = 'None'
+
+        data[tag] = {
+                'shipped': shipped,
+                'endwarranty': endw,
+                'model': model,
+                'days_remaining': drem,
+                'eol_status': eol
+                }
+        if args.update:
+            db[tag] = data[tag]
+    return data
+
+def remove_key_from_db(svctag):
+    ''' Deletes the given keys from local DB '''
+    removed = []
+    fails = []
+    for key in svctag:
+        try:
+            del db[key]
+            removed.append(key)
+        except KeyError:
+            fails.append(key)
+            pass
+    return removed, fails
+
+def toggle_eol_status(svctag):
+    ''' 
+    Toggle the EOL status of given tags.
+    If there's no current status for given TAG, then we set it as False.
+    '''
+    for key in svctag:
+        try:
+            if db[key]:
+                if db[key]['eol_status'] == 'False':
+                    db[key]['eol_status'] = 'True'
+                    print '[%s] EOL status toggled in DB to "True"!' % key
+                elif db[key]['eol_status'] == 'True':
+                    db[key]['eol_status'] = 'False'
+                    print '[%s] EOL status toggled in DB to "False"!' % key
+                elif db[key]['eol_status'] == 'None':
+                    db[key]['eol_status'] = 'False'
+                    print '[%s] EOL status toggled in DB to "False"!' % key
+                else:
+                    print '[%s] Unknown value set in EOL field: %s' % ( key,
+                        db[key]['eol_status'] )
+            else:
+                print '[%s] No EOL status set in DB! Setting it to "None"' % key
+                db[key]['eol_status'] = 'None'
+
+        except KeyError:
+            print "[%s] Unable to toggle EOL, doesn't exist in the DB!" % key
+            pass
+
+def get_expiring_hardware(scope):
+    '''
+    Find hardware from the DB that expires in =< scope days.
+    Skip all EOL tagged hardware.
+    '''
+    exp_hw = []
+    for key in db:
+        if db[key]['eol_status'] == 'True':
+            continue
+        else:
+            drem = days_remaining(datetime.datetime.strptime(
+                db[key]['endwarranty'], '%d.%m.%Y'))
+            if int(drem) <= scope:
+                exp_hw.append(key)
+    return exp_hw
+
+
+def print_json(data):
+    ''' Output as JSON format '''
+    print json.dumps(data, indent=4, sort_keys=True)
+
+def print_csv(data):
+    ''' Output as CSV '''
+    print '#servicetag,model,shipped,endwarranty,daysremaining,eolstatus'
+    for tag in data:
+        print '%s,%s,%s,%s,%s,%s' % ( tag, data[tag]['model'],
+            data[tag]['shipped'], data[tag]['endwarranty'],
+            data[tag]['days_remaining'], data[tag]['eol_status'] )
+
+def print_text(data):
+    ''' Output as plain text '''
+    for tag in data:
+        print 'Service Tag:     ', tag
+        print ' Model:          ', data[tag]['model']
+        print ' Shipped:        ', data[tag]['shipped']
+        print ' End Warranty:   ', data[tag]['endwarranty']
+        print ' Days Remaining: ', data[tag]['days_remaining']
+        print ' EOL Status:     ', data[tag]['eol_status']
+
+if __name__ == "__main__":
+    args =  opts()
+    stags = [s.upper() for s in args.stags]
+    if args.update or args.remove or args.eol:
+        db = shelve.open(DB, writeback=True)
+    else:
+        db = shelve.open(DB, flag='r')
+
+
+    if args.remove:
+        removed, fails = remove_key_from_db(stags)
+        for key in removed:
+            print '[%s] removed from DB!' % key
+        for key in fails:
+            print "[%s] doesn't exist in the DB!" % key
+        sys.exit()
+
+    ID = re.sub(r'[a-zA-Z]', str(randint(1, 9)), str(uuid4()))
+    if args.exp or args.printall:
+        data = compose_data()
+    else:
+        data = compose_data(stags)
+
+    if not data:
+        print 'No valid service tags returned!'
+        sys.exit()
+
+    if args.exp:
+        exp = get_expiring_hardware(args.exp)
+        exp_data = {}
+        for key in exp:
+            exp_data[key] = data[key]
+        if args.json:
+            print_json(exp_data)
+            sys.exit()
+        elif args.csv:
+            print_csv(exp_data)
+            sys.exit()
+        else:
+            print_text(exp_data)
+            sys.exit()
+
+    if args.printall:
+        if args.json:
+            print_json(data)
+            sys.exit()
+        elif args.csv:
+            print_csv(data)
+            sys.exit()
+        else:
+            print_text(data)
+            sys.exit()
+
+    if args.eol:
+         toggle_eol_status(stags)
+         sys.exit()
+
+    db.close()
+
+    if args.json:
+        print_json(data)
+        sys.exit()
+
+    elif args.csv:
+        print_csv(data)
+        sys.exit()
+
+    else:
+        print_text(data)
+        sys.exit()
