@@ -34,7 +34,7 @@ DB = '/tmp/dell_assets.db'
 def opts():
     ''' Option parser '''
     parser = argparse.ArgumentParser(description='''
-    Lightweight Dell Hardware Asset Management''')
+    Lightweight Asset Management for Dell Hardware''')
     parser.add_argument('stags', nargs='*')
     parser.add_argument('--json', help='Output results as JSON.',
             action="store_true")
@@ -54,6 +54,9 @@ def opts():
             nargs=1, type=int)
     parser.add_argument('--printall', help='Print everything we have in the DB.',
             action='store_true')
+    parser.add_argument('--hostname',
+            help='Set hostname for the STAG entry')
+
     args = parser.parse_args()
     if len(sys.argv) < 2:
         parser.print_help()
@@ -154,13 +157,19 @@ def compose_data(staglist=None):
                 eol = db[tag]['eol_status']
         except KeyError:
             eol = 'None'
+        try:
+            if db[tag]['hostname']:
+                hostname = db[tag]['hostname']
+        except KeyError:
+            hostname = 'None'
 
         data[tag] = {
                 'shipped': shipped,
                 'endwarranty': endw,
                 'model': model,
                 'days_remaining': drem,
-                'eol_status': eol
+                'eol_status': eol,
+                'hostname': hostname
                 }
         if args.update:
             db[tag] = data[tag]
@@ -176,8 +185,17 @@ def remove_key_from_db(svctag):
             removed.append(key)
         except KeyError:
             fails.append(key)
-            pass
     return removed, fails
+
+def set_hostname(svctag, hostname):
+    ''' Set hostname for the given service tag'''
+    for key in svctag:
+        try:
+            if db[key]:
+                db[key]['hostname'] = hostname
+                print '[%s] hostname set as [%s]' % ( key, hostname )
+        except KeyError:
+            print '[%s] not found in the DB!' % key
 
 def toggle_eol_status(svctag):
     ''' 
@@ -230,11 +248,12 @@ def print_json(data):
 
 def print_csv(data):
     ''' Output as CSV '''
-    print '#servicetag,model,shipped,endwarranty,daysremaining,eolstatus'
+    print '#servicetag,model,shipped,endwarranty,daysremaining,eolstatus,hostname'
     for tag in data:
-        print '%s,%s,%s,%s,%s,%s' % ( tag, data[tag]['model'],
+        print '%s,%s,%s,%s,%s,%s,%s' % ( tag, data[tag]['model'],
             data[tag]['shipped'], data[tag]['endwarranty'],
-            data[tag]['days_remaining'], data[tag]['eol_status'] )
+            data[tag]['days_remaining'], data[tag]['eol_status'],
+            data[tag]['hostname'])
 
 def print_text(data):
     ''' Output as plain text '''
@@ -245,15 +264,23 @@ def print_text(data):
         print ' End Warranty:   ', data[tag]['endwarranty']
         print ' Days Remaining: ', data[tag]['days_remaining']
         print ' EOL Status:     ', data[tag]['eol_status']
+        print ' Hostname:       ', data[tag]['hostname']
 
 if __name__ == "__main__":
     args =  opts()
     stags = [s.upper() for s in args.stags]
-    if args.update or args.remove or args.eol:
+    if args.update or args.remove or args.eol or args.hostname:
         db = shelve.open(DB, writeback=True)
     else:
         db = shelve.open(DB, flag='r')
 
+    if args.hostname:
+        if stags:
+            set_hostname(stags, args.hostname)
+            sys.exit()
+        else:
+            print 'No service tags given!'
+            sys.exit()
 
     if args.remove:
         removed, fails = remove_key_from_db(stags)
