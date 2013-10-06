@@ -325,9 +325,9 @@ def _print(data, ext=None):
     else:
         print_text(data)
 
-if __name__ == "__main__":
-    args =  opts()
-    stags = [s.upper() for s in args.stags]
+def open_db():
+    ''' Handle opening the shelve db '''
+    global db
     if ( args.update or args.remove or args.eol
             or args.hostname or args.diffupdate
             or args.model or args.updateall ):
@@ -340,6 +340,9 @@ if __name__ == "__main__":
             db = shelve.open(DB, flag='c')
             db.close()
             db = shelve.open(DB, flag='r')
+
+def main(args, stags):
+    ''' Parse majority of the options and take actions '''
 
     if args.hostname:
         if stags:
@@ -365,7 +368,6 @@ if __name__ == "__main__":
             print "[%s] doesn't exist in the DB!" % key
         sys.exit()
 
-    ID = re.sub(r'[a-zA-Z]', str(randint(1, 9)), str(uuid4()))
     if args.exp or args.printall or args.updateall:
         (data, db_updates) = compose_data()
     else:
@@ -399,3 +401,13 @@ if __name__ == "__main__":
     db.close()
     _print(data)
     sys.exit()
+
+if __name__ == "__main__":
+
+    args =  opts()
+    stags = [s.upper() for s in args.stags]
+    ID = re.sub(r'[a-zA-Z]', str(randint(1, 9)), str(uuid4()))
+
+    open_db()
+    main(args, stags)
+
