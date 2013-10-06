@@ -57,7 +57,7 @@ def opts():
             action='store_true')
     parser.add_argument('--updateall', help='Refresh all entries in DB from Dell.',
             action='store_true')
-    parser.add_argument('--semiupdate',
+    parser.add_argument('--diffupdate',
             help="Update DB with results from Dell if there's no entry in DB.",
             action='store_true')
     parser.add_argument('--skip', help='''
@@ -210,7 +210,7 @@ def compose_data(staglist=None):
                 'eol_status': eol,
                 'hostname': hostname
                 }
-        if ( args.update or args.semiupdate or
+        if ( args.update or args.diffupdate or
                 args.eol or args.updateall ):
             db[tag] = data[tag]
     return data, db_updates
@@ -314,7 +314,7 @@ if __name__ == "__main__":
     args =  opts()
     stags = [s.upper() for s in args.stags]
     if ( args.update or args.remove or args.eol
-            or args.hostname or args.semiupdate
+            or args.hostname or args.diffupdate
             or args.model or args.updateall ):
         db = shelve.open(DB, writeback=True)
     else:
@@ -368,7 +368,7 @@ if __name__ == "__main__":
         _print(exp_data)
         sys.exit()
 
-    if args.update or args.semiupdate or args.updateall:
+    if args.update or args.diffupdate or args.updateall:
         if len(db_updates) != 0:
             (data, foo) = compose_data(db_updates)
             _print(data)

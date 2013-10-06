@@ -3,7 +3,7 @@ dasset
 
 ```
 usage: dasset [-h] [--json] [--csv] [--txt] [--update] [--updateall]
-              [--semiupdate] [--skip] [--remove] [--eol] [--exp EXP]
+              [--diffupdate] [--skip] [--remove] [--eol] [--exp EXP]
               [--printall] [--hostname HOSTNAME] [--model MODEL]
               [stags [stags ...]]
 
@@ -19,7 +19,7 @@ optional arguments:
   --txt                Output results as TXT (default).
   --update             Update DB for given STAGs with results from Dell.
   --updateall          Refresh all entries in DB from Dell.
-  --semiupdate         Update DB with results from Dell if there's no entry in
+  --diffupdate         Update DB with results from Dell if there's no entry in
                        DB.
   --skip               Skip local DB check and always poll Dell for data.
   --remove             Remove STAG from local DB.
