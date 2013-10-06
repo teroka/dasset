@@ -58,7 +58,7 @@ def opts():
     parser.add_argument('--updateall', help='Refresh all entries in DB from Dell.',
             action='store_true')
     parser.add_argument('--diffupdate',
-            help="Update DB with results from Dell if there's no entry in DB.",
+            help="Update DB with results from Dell if there's no existing entry.",
             action='store_true')
     parser.add_argument('--skip', help='''
     Skip local DB check and always poll Dell for data.''',
@@ -370,7 +370,6 @@ if __name__ == "__main__":
 
     if args.update or args.diffupdate or args.updateall:
         if len(db_updates) != 0:
-            (data, foo) = compose_data(db_updates)
             _print(data)
         if len(db_updates) > 1:
             print '%i entries updated.' % len(db_updates)
