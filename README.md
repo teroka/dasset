@@ -33,6 +33,13 @@ optional arguments:
   --model MODEL         Set model for the STAG entry.
 ```
 
+### Requirements
+------
+*    This project requires the python [SUDS](https://pypi.python.org/pypi/suds) SOAP module, on most systems, you can run:
+```
+    $ pip install suds
+```
+
 ### Some Examples
 ------
 
