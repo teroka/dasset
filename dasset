@@ -5,7 +5,8 @@
  Lightweight asset management for Dell hardware.
 
  *NOTE* the restriction of python shelve, if multiple users
- uses this tool.
+ uses this tool. There is file locking in place that should
+ safeguard the DB tho.
 
  ## The shelve module does not support concurrent read/write
  ## access to shelved objects. (Multiple simultaneous read
@@ -44,15 +45,17 @@ import json
 import re
 import shelve
 import os
+import new
 from time import sleep
 from uuid import uuid4
 from random import randint
+from fcntl import flock, LOCK_SH, LOCK_NB, LOCK_UN, LOCK_EX
 
 # Set this to where ever you want to store your DB.
 DB = '/tmp/dell_assets.db'
 
 # Datestring which is used to show the warranty/ship dates.
-# NOTE: If you change this after pupulating the DB, you need to update
+# NOTE: If you change this after populating the DB, you need to update
 #       all the entries with --updateall
 # DSTRING = '%Y.%m.%d'
 DSTRING = '%d.%m.%Y'
@@ -355,21 +358,40 @@ def _print(data, diff=None):
     else:
         print_text(data)
 
-def open_db():
-    ''' Handle opening the shelve db '''
-    global db
+def close_db(db):
+    ''' Handle closing the shelve db '''
+    shelve.Shelf.close(db)
+    flock(db.lockfile.fileno(), LOCK_UN)
+    db.lockfile.close()
+
+def open_db(dbfname):
+    ''' Handle opening the shelve db and locking it '''
+
+    lockfilename = dbfname + '.lock'
+    lockfile = open(lockfilename, 'w')
+
     if ( args.update or args.remove or args.eol
             or args.hostname or args.diffupdate
             or args.model or args.updateall ):
-        db = shelve.open(DB, writeback=True)
+        flock(lockfile.fileno(), LOCK_EX | LOCK_NB)
+        db = shelve.open(dbfname, writeback=True)
     else:
-        if os.path.isfile(DB):
-            db = shelve.open(DB, flag='r')
+        if os.path.isfile(dbfname):
+            flock(lockfile.fileno(), LOCK_SH)
+            db = shelve.open(dbfname, flag='r')
         else:
             # Create the DB if we're only querying and don't have it yet.
-            db = shelve.open(DB, flag='c')
+            flock(lockfile.fileno(), LOCK_EX | LOCK_NB)
+            db = shelve.open(dbfname, flag='c')
             db.close()
-            db = shelve.open(DB, flag='r')
+            flock(lockfile.fileno(), LOCK_UN)
+            flock(lockfile.fileno(), LOCK_SH)
+            db = shelve.open(dbfname, flag='r')
+
+    db.close = new.instancemethod(close_db, db, shelve.Shelf)
+    db.lockfile = lockfile
+
+    return db
 
 def main(args, stags):
     ''' Parse majority of the options and take actions '''
@@ -437,7 +459,11 @@ if __name__ == '__main__':
     args =  opts()
     stags = [s.upper() for s in args.stags]
     ID = re.sub(r'[a-zA-Z]', str(randint(1, 9)), str(uuid4()))
-
-    open_db()
+    try:
+        db = open_db(DB)
+    except IOError:
+        sys.stderr.write("Unable to get lock for %s.\n" % DB)
+        sys.exit()
+        
     main(args, stags)
 
