@@ -15,6 +15,9 @@
 Dependencies:
     * python-suds
 
+Get the most recent version from:
+    * https://github.com/teroka/dasset
+
 '''
 
 import suds
@@ -24,12 +27,19 @@ import argparse
 import json
 import re
 import shelve
+import os
 from time import sleep
 from uuid import uuid4
 from random import randint
 
 # Set this to where ever you want to store your DB.
 DB = '/tmp/dell_assets.db'
+
+# Datestring which is used to show the warranty/ship dates.
+# NOTE: If you change this after pupulating the DB, you need to update
+#       all the entries with --updateall
+# DSTRING = '%Y.%m.%d'
+DSTRING = '%d.%m.%Y'
 
 def opts():
     ''' Option parser '''
@@ -40,7 +50,12 @@ def opts():
             action="store_true")
     parser.add_argument('--csv', help='Output results as CSV.',
             action="store_true")
-    parser.add_argument('--update', help='Update DB with results from Dell.',
+    parser.add_argument('--txt', help='Output results as TXT (default).',
+            action="store_true")
+    parser.add_argument('--update',
+            help='Update DB for given STAGs with results from Dell.',
+            action='store_true')
+    parser.add_argument('--updateall', help='Refresh all entries in DB from Dell.',
             action='store_true')
     parser.add_argument('--semiupdate',
             help="Update DB with results from Dell if there's no entry in DB.",
@@ -53,8 +68,7 @@ def opts():
     parser.add_argument('--eol', help='Toggle EOL status of given STAG.',
             action='store_true')
     parser.add_argument('--exp',
-            help='Show hardware which has <= N remaining days of warranty.',
-            nargs=1, type=int)
+            help='Show hardware which has <= N remaining days of warranty.')
     parser.add_argument('--printall', help='Print everything we have in the DB.',
             action='store_true')
     parser.add_argument('--hostname',
@@ -81,7 +95,8 @@ def get_warr(svctag):
     Return warranty information from either DB or
     by querying it from Dell site
     '''
-    if args.update:
+    if args.update or args.updateall:
+        print '[%s] fetching updated data from Dell.' % svctag
         return get_warr_from_dell(svctag)
     elif args.skip:
         return get_warr_from_dell(svctag)
@@ -90,8 +105,8 @@ def get_warr(svctag):
             shipped_date = db[svctag]['shipped']
             end_date = db[svctag]['endwarranty']
             model = db[svctag]['model']
-            drem = days_remaining(datetime.datetime.strptime(end_date, '%d.%m.%Y'))
-            return shipped_date, end_date, drem, model
+            drem = days_remaining(datetime.datetime.strptime(end_date, DSTRING))
+            return shipped_date, end_date, drem, model, None
 
         except KeyError:
             sys.stderr.write("[%s] doesn't exist in DB, fetcing from Dell.\n"
@@ -106,7 +121,11 @@ def get_warr_from_dell(svctag):
     '''
 
     url = 'http://xserv.dell.com/services/assetservice.asmx?WSDL'
-    if len(args.stags) > 1:
+    if args.updateall:
+        # Sleep for 2s between queries if we're trying to update all entries.
+        # Dell seems to be bit triggerhappy at kicking us out for querying a lot.
+        sleep(2)
+    elif len(args.stags) > 1:
         # Courtesy sleep if we have multiple tags
         sleep(1)
     client = suds.client.Client(url)
@@ -141,9 +160,9 @@ def get_warr_from_dell(svctag):
     endwarranty = warrs[-1]
 
     drem = days_remaining(endwarranty)
-    shipped_date = shipped.strftime('%d.%m.%Y')
-    end_date = endwarranty.strftime('%d.%m.%Y')
-    return shipped_date, end_date, drem, model
+    shipped_date = shipped.strftime(DSTRING)
+    end_date = endwarranty.strftime(DSTRING)
+    return shipped_date, end_date, drem, model, True
 
 def compose_data(staglist=None):
     '''
@@ -153,15 +172,17 @@ def compose_data(staglist=None):
     Write the updated data to DB if so asked.
     '''
     data = {}
+    db_updates = []
 
     if not staglist:
         staglist = []
         for key in db:
             staglist.append(key)
-    
     for tag in staglist:
         try:
-            (shipped, endw, drem, model) = get_warr(tag)
+            (shipped, endw, drem, model, poll) = get_warr(tag)
+            if poll:
+                db_updates.append(tag)
         except TypeError:
             continue
         try:
@@ -189,9 +210,10 @@ def compose_data(staglist=None):
                 'eol_status': eol,
                 'hostname': hostname
                 }
-        if args.update or args.semiupdate or args.eol:
+        if ( args.update or args.semiupdate or
+                args.eol or args.updateall ):
             db[tag] = data[tag]
-    return data
+    return data, db_updates
 
 def remove_key_from_db(svctag):
     ''' Deletes the given keys from local DB '''
@@ -248,7 +270,7 @@ def get_expiring_hardware(scope):
             continue
         else:
             drem = days_remaining(datetime.datetime.strptime(
-                db[key]['endwarranty'], '%d.%m.%Y'))
+                db[key]['endwarranty'], DSTRING))
             if int(drem) <= scope:
                 exp_hw.append(key)
     return exp_hw
@@ -278,15 +300,31 @@ def print_text(data):
         print ' EOL Status:     ', data[tag]['eol_status']
         print ' Hostname:       ', data[tag]['hostname']
 
+def _print(data, ext=None):
+    ''' Wrapper to call different print jobs '''
+
+    if args.json:
+       print_json(data)
+    elif args.csv:
+        print_csv(data)
+    else:
+        print_text(data)
+
 if __name__ == "__main__":
     args =  opts()
     stags = [s.upper() for s in args.stags]
     if ( args.update or args.remove or args.eol
             or args.hostname or args.semiupdate
-            or args.model ):
+            or args.model or args.updateall ):
         db = shelve.open(DB, writeback=True)
     else:
-        db = shelve.open(DB, flag='r')
+        if os.path.isfile(DB):
+            db = shelve.open(DB, flag='r')
+        else:
+            # Create the DB if we're only querying and don't have it yet.
+            db = shelve.open(DB, flag='c')
+            db.close()
+            db = shelve.open(DB, flag='r')
 
     if args.hostname:
         if stags:
@@ -313,55 +351,37 @@ if __name__ == "__main__":
         sys.exit()
 
     ID = re.sub(r'[a-zA-Z]', str(randint(1, 9)), str(uuid4()))
-    if args.exp or args.printall:
-        data = compose_data()
+    if args.exp or args.printall or args.updateall:
+        (data, db_updates) = compose_data()
     else:
-        data = compose_data(stags)
+        (data, db_updates) = compose_data(stags)
 
     if not data:
         print 'No valid service tags returned!'
         sys.exit()
 
     if args.exp:
-        exp = get_expiring_hardware(args.exp)
+        exp = get_expiring_hardware(int(args.exp))
         exp_data = {}
         for key in exp:
             exp_data[key] = data[key]
-        if args.json:
-            print_json(exp_data)
-            sys.exit()
-        elif args.csv:
-            print_csv(exp_data)
-            sys.exit()
-        else:
-            print_text(exp_data)
-            sys.exit()
+        _print(exp_data)
+        sys.exit()
 
-    if args.printall:
-        if args.json:
-            print_json(data)
-            sys.exit()
-        elif args.csv:
-            print_csv(data)
-            sys.exit()
+    if args.update or args.semiupdate or args.updateall:
+        if len(db_updates) != 0:
+            (data, foo) = compose_data(db_updates)
+            _print(data)
+        if len(db_updates) > 1:
+            print '%i entries updated.' % len(db_updates)
         else:
-            print_text(data)
-            sys.exit()
+            print '%i entry updated.' % len(db_updates)
+        sys.exit()
 
     if args.eol:
          toggle_eol_status(stags)
          sys.exit()
 
     db.close()
-
-    if args.json:
-        print_json(data)
-        sys.exit()
-
-    elif args.csv:
-        print_csv(data)
-        sys.exit()
-
-    else:
-        print_text(data)
-        sys.exit()
+    _print(data)
+    sys.exit()

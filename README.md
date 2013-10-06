@@ -2,9 +2,9 @@ dasset
 ======
 
 ```
-usage: dasset [-h] [--json] [--csv] [--update] [--semiupdate] [--skip]
-              [--remove] [--eol] [--exp EXP] [--printall]
-              [--hostname HOSTNAME] [--model MODEL]
+usage: dasset [-h] [--json] [--csv] [--txt] [--update] [--updateall]
+              [--semiupdate] [--skip] [--remove] [--eol] [--exp EXP]
+              [--printall] [--hostname HOSTNAME] [--model MODEL]
               [stags [stags ...]]
 
 Lightweight Asset Management for Dell Hardware
@@ -16,7 +16,9 @@ optional arguments:
   -h, --help           show this help message and exit
   --json               Output results as JSON.
   --csv                Output results as CSV.
-  --update             Update DB with results from Dell.
+  --txt                Output results as TXT (default).
+  --update             Update DB for given STAGs with results from Dell.
+  --updateall          Refresh all entries in DB from Dell.
   --semiupdate         Update DB with results from Dell if there's no entry in
                        DB.
   --skip               Skip local DB check and always poll Dell for data.
