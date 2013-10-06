@@ -36,6 +36,7 @@ Get the most recent version from:
 '''
 
 import suds
+import urllib2
 import sys
 import datetime
 import argparse
@@ -55,6 +56,9 @@ DB = '/tmp/dell_assets.db'
 #       all the entries with --updateall
 # DSTRING = '%Y.%m.%d'
 DSTRING = '%d.%m.%Y'
+
+# URL for the Dell SOAP api
+URL = 'http://xserv.dell.com/services/assetservice.asmx?WSDL'
 
 def opts():
     ''' Option parser '''
@@ -112,7 +116,7 @@ def get_warr(svctag):
     by querying it from Dell site
     '''
     if args.update or args.updateall:
-        print '[%s] fetching updated data from Dell.' % svctag
+        print '[%s] Fetching updated data from Dell.' % svctag
         return get_warr_from_dell(svctag)
     elif args.skip:
         return get_warr_from_dell(svctag)
@@ -136,15 +140,12 @@ def get_warr_from_dell(svctag):
         https://gist.github.com/leinaddm/1893036
     '''
 
-    url = 'http://xserv.dell.com/services/assetservice.asmx?WSDL'
-    if args.updateall:
-        # Sleep for 2s between queries if we're trying to update all entries.
+    if len(args.stags) > 10:
+        # Sleep a bit between queries if we're trying to update a lot of them.
         # Dell seems to be bit triggerhappy at kicking us out for querying a lot.
-        sleep(2)
-    elif len(args.stags) > 1:
-        # Courtesy sleep if we have multiple tags
         sleep(1)
-    client = suds.client.Client(url)
+
+    client = suds.client.Client(URL)
     res = client.service.GetAssetInformation(ID, 'dellwarrantycheck',
             svctag)
 
@@ -189,6 +190,7 @@ def compose_data(staglist=None):
     '''
     data = {}
     db_updates = []
+    poll = None
 
     if not staglist:
         staglist = []
@@ -202,10 +204,22 @@ def compose_data(staglist=None):
             continue
         try:
             (shipped, endw, drem, model, poll) = get_warr(tag)
-            if poll:
-                db_updates.append(tag)
         except TypeError:
             continue
+
+        except urllib2.URLError:
+            # Catch the urllib error if Dell kicked us out and sleep more
+            # before retrying.
+            sys.stderr.write("[%s] Dell kicked our query, sleeping a while..\n"
+                    % tag)
+            sleep(5)
+            try:
+                (shipped, endw, drem, model, poll) = get_warr(tag)
+            except urllib2.URLError:
+                # Give up
+                sys.stderr.write("[%s] Still got kicked out, giving up..\n"
+                        % tag)
+                continue
         try:
             if db[tag]['eol_status']:
                 eol = db[tag]['eol_status']
@@ -234,6 +248,9 @@ def compose_data(staglist=None):
         if ( args.update or args.eol or
                 args.diffupdate or args.updateall == 'all'):
             db[tag] = data[tag]
+
+        if poll:
+            db_updates.append(tag)
 
     return data, db_updates
 
