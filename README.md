@@ -171,7 +171,7 @@ H8B591J,Inspiron 5160,03.10.2004,02.10.2005,0,None,foobar.nyaa.com
 
 ```
 $ ./dasset --diffupdate H8B544J H8B291J
-[H8B291J] doesn't exist in DB, fetcing from Dell.
+[H8B291J] doesn't exist in DB, fetching from Dell.
 Service Tag:      H8B291J
  Model:           OptiPlex GX270
  Shipped:         30.09.2004

@@ -133,7 +133,7 @@ def get_warr(svctag):
             return shipped_date, end_date, drem, model, None
 
         except KeyError:
-            sys.stderr.write("[%s] doesn't exist in DB, fetcing from Dell.\n"
+            sys.stderr.write("[%s] doesn't exist in DB, fetching from Dell.\n"
                     % svctag)
             return get_warr_from_dell(svctag)
 
