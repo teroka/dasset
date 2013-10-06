@@ -181,3 +181,18 @@ Service Tag:      H8B291J
  Hostname:        None
 1 entry updated.
 ```
+
+* Update all EOL entries in the DB
+
+```
+$ ./dasset --updateall eol
+[H8B544J] Fetching updated data from Dell.
+Service Tag:      H8B544J
+ Model:           Latitude E6400
+ Shipped:         22.12.2008
+ End Warranty:    21.12.2011
+ Days Remaining:  0
+ EOL Status:      True
+ Hostname:        None
+1 entry updated.
+```
