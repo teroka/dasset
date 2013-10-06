@@ -22,7 +22,7 @@ optional arguments:
   --updateall {eol,non-eol,all}
                         Refresh all, eol or non-eol entries in DB from Dell.
   --diffupdate          Update DB with results from Dell if there's no
-                        existing entry.
+                        existing entry for given STAGs.
   --skip                Skip local DB check and always poll Dell for data.
   --remove              Remove STAG from local DB.
   --eol                 Toggle EOL status of given STAG.
@@ -165,4 +165,19 @@ $ ./dasset --printall --csv
 #servicetag,model,shipped,endwarranty,daysremaining,eolstatus,hostname
 H8B544J,Latitude E6400,22.12.2008,21.12.2011,0,True,None
 H8B591J,Inspiron 5160,03.10.2004,02.10.2005,0,None,foobar.nyaa.com
+```
+
+* Update missing entries to DB
+
+```
+$ ./dasset --diffupdate H8B544J H8B291J
+[H8B291J] doesn't exist in DB, fetcing from Dell.
+Service Tag:      H8B291J
+ Model:           OptiPlex GX270
+ Shipped:         30.09.2004
+ End Warranty:    29.09.2007
+ Days Remaining:  0
+ EOL Status:      None
+ Hostname:        None
+1 entry updated.
 ```

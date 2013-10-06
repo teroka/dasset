@@ -322,8 +322,14 @@ def print_text(data):
         print ' EOL Status:     ', data[tag]['eol_status']
         print ' Hostname:       ', data[tag]['hostname']
 
-def _print(data, ext=None):
-    ''' Wrapper to call different print jobs '''
+def _print(data, diff=None):
+    ''' Wrapper to call different print jobs with proper data '''
+
+    if diff:
+        diff_data = {}
+        for key in diff:
+            diff_data[key] = data[key]
+        data = diff_data
 
     if args.json:
         print_json(data)
@@ -394,8 +400,8 @@ def main(args, stags):
 
     if args.update or args.diffupdate or args.updateall:
         if len(db_updates) != 0:
-            _print(data)
-        if len(db_updates) > 1:
+            _print(data, db_updates)
+        if len(db_updates) > 1 or len(db_updates) == 0:
             print '%i entries updated.' % len(db_updates)
         else:
             print '%i entry updated.' % len(db_updates)
@@ -409,7 +415,7 @@ def main(args, stags):
     _print(data)
     sys.exit()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
 
     args =  opts()
     stags = [s.upper() for s in args.stags]
