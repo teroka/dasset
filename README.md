@@ -162,7 +162,7 @@ $ ./dasset --printall --json
 
 ```
 $ ./dasset --printall --csv
-#servicetag,model,shipped,endwarranty,daysremaining,eolstatus,hostname
+servicetag,model,shipped,endwarranty,daysremaining,eolstatus,hostname
 H8B544J,Latitude E6400,22.12.2008,21.12.2011,0,True,None
 H8B591J,Inspiron 5160,03.10.2004,02.10.2005,0,None,foobar.nyaa.com
 ```

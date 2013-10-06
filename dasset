@@ -324,7 +324,7 @@ def print_json(data):
 
 def print_csv(data):
     ''' Output as CSV '''
-    print '#servicetag,model,shipped,endwarranty,daysremaining,eolstatus,hostname'
+    print 'servicetag,model,shipped,endwarranty,daysremaining,eolstatus,hostname'
     for tag in data:
         print '%s,%s,%s,%s,%s,%s,%s' % ( tag, data[tag]['model'],
             data[tag]['shipped'], data[tag]['endwarranty'],
