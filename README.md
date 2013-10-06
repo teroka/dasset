@@ -39,6 +39,10 @@ optional arguments:
 ```
     $ pip install suds
 ```
+*    For debian/ubuntu, you can install it from the mirror:
+```
+    $ sudo apt-get install python-suds
+```
 
 ### Some Examples
 ------

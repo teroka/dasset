@@ -117,7 +117,7 @@ def days_remaining(endwar = None):
 def get_warr(svctag):
     '''
     Return warranty information from either DB or
-    by querying it from Dell site
+    by further querying it from Dell site
     '''
     if args.update or args.updateall:
         print '[%s] Fetching updated data from Dell.' % svctag
@@ -140,6 +140,9 @@ def get_warr(svctag):
 def get_warr_from_dell(svctag):
     '''
     Get the data for given tag from dell site
+    If we're querying > 10 tags, this will sleep 1s per query to
+    reduce the chance of Dell's site refusing us.
+
     Core of this function is adopted from:
         https://gist.github.com/leinaddm/1893036
     '''
@@ -189,7 +192,6 @@ def compose_data(staglist=None):
     '''
     Composes dict from given service tags.
     If none are give, we get everything from the DB.
-    Will sleep 1s between each ext query so we're not hammering the dell site.
     Write the updated data to DB if so asked.
     '''
     data = {}
@@ -271,9 +273,7 @@ def remove_key_from_db(svctag):
     return removed, fails
 
 def set_entry(svctag, entry, value):
-    ''' 
-    Set @entry as @value for the given service tag.
-    '''
+    ''' Set @entry as @value for the given service tag. '''
     for key in svctag:
         try:
             if db[key]:
@@ -285,7 +285,8 @@ def set_entry(svctag, entry, value):
 def toggle_eol_status(svctag):
     ''' 
     Toggle the EOL status of given tags.
-    If there's no current status for given TAG, then we set it as False.
+    Initial state for EOL status is 'None' and that will be
+    tagged as 'False' first.
     '''
     for key in svctag:
         if db[key]:
@@ -305,7 +306,7 @@ def toggle_eol_status(svctag):
 def get_expiring_hardware(scope):
     '''
     Find hardware from the DB that expires in =< scope days.
-    Skip all EOL tagged hardware.
+    Skip all EOL = 'True' tagged hardware.
     '''
     exp_hw = []
     for key in db:
