@@ -70,10 +70,11 @@ def opts():
     parser.add_argument('--update',
             help='Update DB for given STAGs with results from Dell.',
             action='store_true')
-    parser.add_argument('--updateall', help='Refresh all entries in DB from Dell.',
-            action='store_true')
+    parser.add_argument('--updateall',
+            help='Refresh all, eol or non-eol entries in DB from Dell.',
+            choices=['eol', 'non-eol', 'all'])
     parser.add_argument('--diffupdate',
-            help="Update DB with results from Dell if there's no existing entry.",
+            help="Update DB with results from Dell if there's no existing entry for given STAGs.",
             action='store_true')
     parser.add_argument('--skip', help='''
     Skip local DB check and always poll Dell for data.''',
@@ -194,6 +195,11 @@ def compose_data(staglist=None):
         for key in db:
             staglist.append(key)
     for tag in staglist:
+
+        if args.updateall == 'non-eol' and db[tag]['eol_status'] == 'True':
+            continue
+        elif args.updateall == 'eol' and db[tag]['eol_status'] != 'True':
+            continue
         try:
             (shipped, endw, drem, model, poll) = get_warr(tag)
             if poll:
@@ -215,7 +221,7 @@ def compose_data(staglist=None):
             if model == 'unknown' and db[tag]['model']:
                 model = db[tag]['model']
         except KeyError:
-            pass
+            continue
 
         data[tag] = {
                 'shipped': shipped,
@@ -225,9 +231,10 @@ def compose_data(staglist=None):
                 'eol_status': eol,
                 'hostname': hostname
                 }
-        if ( args.update or args.diffupdate or
-                args.eol or args.updateall ):
+        if ( args.update or args.eol or
+                args.diffupdate or args.updateall == 'all'):
             db[tag] = data[tag]
+
     return data, db_updates
 
 def remove_key_from_db(svctag):
@@ -319,7 +326,7 @@ def _print(data, ext=None):
     ''' Wrapper to call different print jobs '''
 
     if args.json:
-       print_json(data)
+        print_json(data)
     elif args.csv:
         print_csv(data)
     else:
@@ -395,8 +402,8 @@ def main(args, stags):
         sys.exit()
 
     if args.eol:
-         toggle_eol_status(stags)
-         sys.exit()
+        toggle_eol_status(stags)
+        sys.exit()
 
     db.close()
     _print(data)
