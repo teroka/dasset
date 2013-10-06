@@ -46,6 +46,7 @@ import re
 import shelve
 import os
 import new
+import atexit
 from time import sleep
 from uuid import uuid4
 from random import randint
@@ -364,7 +365,7 @@ def close_db(db):
     flock(db.lockfile.fileno(), LOCK_UN)
     db.lockfile.close()
 
-def open_db(dbfname):
+def open_db(dbfname, args):
     ''' Handle opening the shelve db and locking it '''
 
     lockfilename = dbfname + '.lock'
@@ -450,7 +451,6 @@ def main(args, stags):
         toggle_eol_status(stags)
         sys.exit()
 
-    db.close()
     _print(data)
     sys.exit()
 
@@ -460,7 +460,8 @@ if __name__ == '__main__':
     stags = [s.upper() for s in args.stags]
     ID = re.sub(r'[a-zA-Z]', str(randint(1, 9)), str(uuid4()))
     try:
-        db = open_db(DB)
+        db = open_db(DB, args)
+        atexit.register( lambda : close_db(db))
     except IOError:
         sys.stderr.write("Unable to get lock for %s.\n" % DB)
         sys.exit()
