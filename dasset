@@ -237,11 +237,12 @@ def compose_data(staglist=None):
         except KeyError:
             hostname = 'None'
 
-        try:
-            if model == 'unknown' and db[tag]['model']:
-                model = db[tag]['model']
-        except KeyError:
-            continue
+        if model == 'unknown':
+            try:
+                if db[tag]['model']:
+                    model = db[tag]['model']
+            except KeyError:
+                pass
 
         data[tag] = {
                 'shipped': shipped,
