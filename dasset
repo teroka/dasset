@@ -53,7 +53,7 @@ from random import randint
 from fcntl import flock, LOCK_SH, LOCK_NB, LOCK_UN, LOCK_EX
 
 # Set this to where ever you want to store your DB.
-DB = '/tmp/dell_assets.db'
+DB = os.environ['HOME'] + '/dell_assets.db'
 
 # Datestring which is used to show the warranty/ship dates.
 # NOTE: If you change this after populating the DB, you need to update
