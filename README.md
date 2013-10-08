@@ -4,7 +4,7 @@ dasset
 ```
 usage: dasset [-h] [--json] [--csv] [--txt] [--update]
               [--updateall {eol,non-eol,all}] [--diffupdate] [--skip]
-              [--remove] [--eol] [--exp EXP] [--printall]
+              [--remove] [--eol {false,true}] [--exp EXP] [--printall]
               [--hostname HOSTNAME] [--model MODEL]
               [stags [stags ...]]
 
@@ -25,7 +25,7 @@ optional arguments:
                         existing entry for given STAGs.
   --skip                Skip local DB check and always poll Dell for data.
   --remove              Remove STAG from local DB.
-  --eol                 Toggle EOL status of given STAG.
+  --eol {false,true}    Set given EOL state for STAG.
   --exp EXP             Show hardware which has <= N remaining days of
                         warranty.
   --printall            Print everything we have in the DB.
@@ -110,11 +110,11 @@ Service Tag:      H8B591J
  Hostname:        None
 ```
 
-* Toggle EOL for entry so it doesn't show in expiring hardware list.
+* Set EOL for entry as 'false' so it doesn't show in expiring hardware list.
 
 ```
-$ ./dasset --eol H8B544J
-[H8B544J] EOL status toggled in DB to "True"!
+$ ./dasset --eol false H8B544J
+[H8B544J] EOL status set in DB as "False"!
 ```
 
 * And run the check again.

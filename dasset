@@ -89,8 +89,8 @@ def opts():
             action='store_true')
     parser.add_argument('--remove', help='Remove STAG from local DB.',
             action='store_true')
-    parser.add_argument('--eol', help='Toggle EOL status of given STAG.',
-            action='store_true')
+    parser.add_argument('--eol', help='Set given EOL state for STAG.',
+            choices=['false', 'true'])
     parser.add_argument('--exp',
             help='Show hardware which has <= N remaining days of warranty.')
     parser.add_argument('--printall', help='Print everything we have in the DB.',
@@ -283,26 +283,21 @@ def set_entry(svctag, entry, value):
         except KeyError:
             print '[%s] not found in the DB!' % key
 
-def toggle_eol_status(svctag):
-    ''' 
-    Toggle the EOL status of given tags.
-    Initial state for EOL status is 'None' and that will be
-    tagged as 'False' first.
+def set_eol_status(svctag, state):
     '''
-    for key in svctag:
-        if db[key]:
-            if db[key]['eol_status'] == 'False':
+    Set the EOL status for given tags.
+    Initial state for EOL status is 'None'.
+    '''
+    if state == 'false':
+        for key in svctag:
+            if db[key]:
+                db[key]['eol_status'] = 'False'
+                print '[%s] EOL status set in DB as "False"!' % key
+    elif state == 'true':
+        for key in svctag:
+            if db[key]:
                 db[key]['eol_status'] = 'True'
-                print '[%s] EOL status toggled in DB to "True"!' % key
-            elif db[key]['eol_status'] == 'True':
-                db[key]['eol_status'] = 'False'
-                print '[%s] EOL status toggled in DB to "False"!' % key
-            elif db[key]['eol_status'] == 'None':
-                db[key]['eol_status'] = 'False'
-                print '[%s] EOL status toggled in DB to "False"!' % key
-            else:
-                print '[%s] Unknown value set in EOL field: %s' % ( key,
-                   db[key]['eol_status'] )
+                print '[%s] EOL status set in DB as "True"!' % key
 
 def get_expiring_hardware(scope):
     '''
@@ -450,7 +445,7 @@ def main(args, stags):
         sys.exit()
 
     if args.eol:
-        toggle_eol_status(stags)
+        set_eol_status(stags, args.eol)
         sys.exit()
 
     _print(data)
