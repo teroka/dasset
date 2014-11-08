@@ -14,7 +14,7 @@
  ## no other program should have it open for reading or writing.
 
 Dependencies:
-    * python-suds
+    * python-requests
 
 Get the most recent version from:
     * https://github.com/teroka/dasset
@@ -36,8 +36,6 @@ Get the most recent version from:
 
 '''
 
-import suds
-import urllib2
 import sys
 import datetime
 import argparse
@@ -47,8 +45,8 @@ import shelve
 import os
 import new
 import atexit
+import requests
 from time import sleep
-from uuid import uuid4
 from random import randint
 from fcntl import flock, LOCK_SH, LOCK_NB, LOCK_UN, LOCK_EX
 
@@ -61,8 +59,12 @@ DB = os.environ['HOME'] + '/dell_assets.db'
 # DSTRING = '%Y.%m.%d'
 DSTRING = '%d.%m.%Y'
 
-# URL for the Dell SOAP api
-URL = 'http://xserv.dell.com/services/assetservice.asmx?WSDL'
+# http://en.community.dell.com/dell-groups/supportapisgroup/
+# DELL API key
+APIKEY = 'd676cf6e1e0ceb8fd14e8cb69acd812d' # generic key as there's no
+                                            # apparent registration yet.
+# URL for the Dell API
+URL = 'https://api.dell.com/support/v2/assetinfo/warranty/tags.json?svctags={0}&apikey=' + APIKEY
 
 def opts():
     ''' Option parser '''
@@ -140,45 +142,32 @@ def get_warr(svctag):
 def get_warr_from_dell(svctag):
     '''
     Get the data for given tag from dell site
-    If we're querying > 10 tags, this will sleep 1s per query to
-    reduce the chance of Dell's site refusing us.
-
-    Core of this function is adopted from:
-        https://gist.github.com/leinaddm/1893036
     '''
+    tformat = '%Y-%m-%dT%H:%M:%S'
+    res = requests.get(URL.format(svctag))
 
-    if len(args.stags) > 10:
-        # Sleep a bit between queries if we're trying to update a lot of them.
-        # Dell seems to be bit triggerhappy at kicking us out for querying a lot.
-        sleep(1)
-
-    client = suds.client.Client(URL)
-    res = client.service.GetAssetInformation(ID, 'dellwarrantycheck',
-            svctag)
-
-    #print client.dict(res)
-
-    if len(res) == 0:
+    if res.status_code != 200:
+        sys.stderr.write('[%s] Caught %i as the response code.\n' % (svctag, res.status_code))
         sys.stderr.write('[%s] Unable to get details for given service tag.\n'
                 % svctag)
         return False
 
-    hdrdata = res['Asset'][0]['AssetHeaderData']
+    fault = res.json['GetAssetWarrantyResponse']['GetAssetWarrantyResult']['Faults']
+    if fault is not None:
+        sys.stderr.write("[%s] Failed to find details. Sure it's a valid TAG?\n" % svctag )
+        return False
+        
 
-    try:
-        model = hdrdata['SystemType'] + ' ' + hdrdata['SystemModel']
-    except AttributeError:
-        model = 'unknown'
-        sys.stderr.write(
-                "[%s] SystemType or SystemModel not found.\n" % svctag )
-    ent = res['Asset'][0]['Entitlements'][0]
+    asset = res.json['GetAssetWarrantyResponse']['GetAssetWarrantyResult']['Response']['DellAsset']
+    model = asset['MachineDescription']
+    ent = asset['Warranties']['Warranty']
+    shipped = datetime.datetime.strptime(asset['ShipDate'],tformat)
 
-    shipped = hdrdata['SystemShipDate']
     warrs = []
     for i in ent:
         if i == None:
             continue
-        warrs.append(i['EndDate'])
+        warrs.append(datetime.datetime.strptime(i['EndDate'],tformat))
 
     warrs.sort()
     endwarranty = warrs[-1]
@@ -208,24 +197,12 @@ def compose_data(staglist=None):
             continue
         elif args.updateall == 'eol' and db[tag]['eol_status'] != 'True':
             continue
+
         try:
             (shipped, endw, drem, model, poll) = get_warr(tag)
         except TypeError:
             continue
 
-        except urllib2.URLError:
-            # Catch the urllib error if Dell kicked us out and sleep more
-            # before retrying.
-            sys.stderr.write("[%s] Dell kicked our query, sleeping a while..\n"
-                    % tag)
-            sleep(5)
-            try:
-                (shipped, endw, drem, model, poll) = get_warr(tag)
-            except urllib2.URLError:
-                # Give up
-                sys.stderr.write("[%s] Still got kicked out, giving up..\n"
-                        % tag)
-                continue
         try:
             if db[tag]['eol_status']:
                 eol = db[tag]['eol_status']
@@ -455,7 +432,6 @@ if __name__ == '__main__':
 
     args =  opts()
     stags = [s.upper() for s in args.stags]
-    ID = re.sub(r'[a-zA-Z]', str(randint(1, 9)), str(uuid4()))
     try:
         db = open_db(DB, args)
         atexit.register( lambda : close_db(db))

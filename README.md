@@ -35,13 +35,13 @@ optional arguments:
 
 ### Requirements
 ------
-*    This project requires the python [SUDS](https://pypi.python.org/pypi/suds) SOAP module, on most systems, you can run:
+*    This project requires the python [requests](https://pypi.python.org/pypi/suds) module, on most systems, you can run:
 ```
-    $ pip install suds
+    $ pip install requests
 ```
 *    For debian/ubuntu, you can install it from the mirror:
 ```
-    $ sudo apt-get install python-suds
+    $ sudo apt-get install python-requests
 ```
 
 ### Some Examples
